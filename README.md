@@ -79,6 +79,8 @@ sites = resolve_sites()
 
 All 24 localities resolved at 100% cropland purity, moving between 3 m and 1,413 m.
 
+![24 verified sites, on the ground](figures/fig4_site_map.png)
+
 ### 2. Sixteen variables, five sensors — not just NDVI
 
 NDVI saturates at canopy closure, says nothing about water status, and cannot tell a small
@@ -228,7 +230,7 @@ pytest -q                                          # 51 tests, ~1 second
 python analysis/step3_audit_sampling_points.py     # is each point actually farmland?
 python analysis/step5_drought_and_phenology.py     # drought indices, phenology, the
                                                     # calendar-vs-phenology-aligned result
-python analysis/step6_charts.py                    # the three PNGs embedded in this README
+python analysis/step6_charts.py                    # the four PNGs embedded in this README
 ```
 
 `step5` is the main event — it reproduces every number in [Results](#results--the-phase-aligned-detector-does-not-win)

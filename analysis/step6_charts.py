@@ -21,6 +21,11 @@ Earth Engine call. Each chart has one job:
                                 real farmland, next to this project's own
                                 24 sites, all independently verified.
 
+  fig4_site_map.png             Where those 24 sites actually are, on each
+                                country's own outline - the map version of
+                                fig3's second panel, for anyone who wants
+                                to see the geography rather than the count.
+
 Uses the validated categorical palette from the dataviz skill (blue/orange,
 CVD-checked) for identity, and the fixed status palette (green/red) for the
 pass/fail audit map, where color encodes verdict rather than identity.
@@ -282,11 +287,97 @@ def fig3_sampling_audit():
     print(f"Wrote {out}")
 
 
+def _add_geojson_outline(ax, geojson_path: Path, facecolor: str, edgecolor: str):
+    """
+    Draw a country outline from a small local GeoJSON file.
+
+    Plain matplotlib polygon patches rather than geopandas/cartopy: the
+    only thing needed here is "draw this one shape", and pulling in a
+    geospatial stack (with its compiled GEOS/PROJ dependencies, notoriously
+    fiddly to install on Windows) for that would be a heavy answer to a
+    light question. Handles Polygon and MultiPolygon; holes (a ring after
+    the first in a polygon's coordinate list) are cut out via evenodd fill.
+    """
+    import json
+
+    from matplotlib.patches import PathPatch
+    from matplotlib.path import Path as MplPath
+
+    geo = json.loads(geojson_path.read_text(encoding="utf-8"))
+    geom = geo["features"][0]["geometry"]
+    polys = geom["coordinates"] if geom["type"] == "MultiPolygon" else [geom["coordinates"]]
+
+    for poly in polys:
+        vertices, codes = [], []
+        for ring in poly:
+            vertices += ring
+            codes += [MplPath.MOVETO] + [MplPath.LINETO] * (len(ring) - 2) + [MplPath.CLOSEPOLY]
+        path = MplPath(vertices, codes)
+        ax.add_patch(PathPatch(path, facecolor=facecolor, edgecolor=edgecolor,
+                               linewidth=1.3, zorder=1))
+
+
+def fig4_site_map():
+    """Where the 24 verified sites actually are, on each country's own outline."""
+    sites = pd.DataFrame(json.loads((REPO / "data" / "sites_resolved.json")
+                                    .read_text(encoding="utf-8")))
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.8))
+    countries = [("Afghanistan", "AFG"), ("Kenya", "KEN")]
+
+    # Panel titles as fig.text at one shared y, not per-axes ax.set_title.
+    # set_aspect("equal") on a map gives the two panels different effective
+    # box heights (Afghanistan's and Kenya's lon/lat extents have different
+    # aspect ratios), so a title padded from each axes' own top - which is
+    # where ax.set_title anchors - lands at a different figure-y for each
+    # panel. Rendered and looked: Kenya's title sat visibly higher than
+    # Afghanistan's. Figure-fraction coordinates put both at the same
+    # height regardless of what the map underneath does.
+    panel_x = [0.02, 0.52]
+
+    for ax, (country, code), tx in zip(axes, countries, panel_x):
+        boundary = REPO / "data" / "boundaries" / f"{code}.geojson"
+        _add_geojson_outline(ax, boundary, facecolor="#eef2ea", edgecolor="#9a9a8f")
+
+        sub = sites[sites.country == country]
+        ax.scatter(sub["lon"], sub["lat"], c=GOOD, s=90, edgecolor="white",
+                  linewidth=1.4, zorder=3)
+
+        fig.text(tx, 0.66, f"{country}  (n={len(sub)})", fontsize=12,
+                 fontweight="bold", color=INK_PRIMARY, ha="left", va="top")
+        ax.set_aspect("equal")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        # Fixed margin around the country outline rather than autoscaling
+        # to the 12 points - otherwise a tight cluster of sites (Kenya's,
+        # which sit in two regional groups) zooms in past the country's own
+        # shape and the map stops reading as "this country".
+        x0, x1 = ax.get_xlim()
+        y0, y1 = ax.get_ylim()
+        pad_x, pad_y = (x1 - x0) * 0.08, (y1 - y0) * 0.08
+        ax.set_xlim(x0 - pad_x, x1 + pad_x)
+        ax.set_ylim(y0 - pad_y, y1 + pad_y)
+
+    _header(fig, "24 verified sites, on the ground",
+           "Every point cleared ≥90% cropland against two independent land-cover "
+           "products\n(ESA WorldCereal + WorldCover) before any satellite data was pulled",
+           top=0.72, left=0.04)
+
+    fig.subplots_adjust(wspace=0.15)
+    out = FIG_DIR / "fig4_site_map.png"
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Wrote {out}")
+
+
 def main():
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     fig1_algorithm_result()
     fig2_bimodal_seasons()
     fig3_sampling_audit()
+    fig4_site_map()
     print(f"\nAll figures in {FIG_DIR}")
 
 
