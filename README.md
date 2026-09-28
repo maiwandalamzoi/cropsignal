@@ -1,5 +1,9 @@
 # CropSignal
 
+[![tests](https://github.com/maiwandalamzoi/cropsignal/actions/workflows/tests.yml/badge.svg)](https://github.com/maiwandalamzoi/cropsignal/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 Multi-sensor Earth observation for agricultural monitoring: **verified cropland sampling**,
 a **multi-index satellite time series**, **published drought indices at field scale**, and a
 **phenology-aligned anomaly detector that does not beat its baseline** — built for smallholder
@@ -9,6 +13,10 @@ systems in Afghanistan and Kenya.
 
 Author: **Maiwand Jan Alamzoi** — [m.alamzoi123@gmail.com](mailto:m.alamzoi123@gmail.com) ·
 [github.com/maiwandalamzoi](https://github.com/maiwandalamzoi)
+
+**New here?** The extracted data ships in the repo (`data/raw/timeseries.csv`), so you can run
+every analysis and see the real findings with no Earth Engine account and no setup beyond
+`pip install`. Jump to [Run it](#run-it).
 
 ---
 
@@ -187,33 +195,54 @@ exist for these sites. The honest validation ladder is:
 
 ---
 
-## Reproduce it
+## Run it
+
+### Option A — see the real findings, no Earth Engine account needed (~2 minutes)
+
+The extracted six-year dataset is committed to the repo, so every analysis script reads it
+straight off disk. Nothing here makes a network call.
 
 ```bash
 git clone https://github.com/maiwandalamzoi/cropsignal
 cd cropsignal
+python -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -e ".[analysis,dev]"
 
-# Earth Engine credentials (service account or `earthengine authenticate`)
-cp .env.example .env    # then fill in GEE_SERVICE_ACCOUNT / GEE_PRIVATE_KEY
-
-python -m cropsignal.extract                        # ~100 min, 24 sites x 138 periods
-python analysis/step5_drought_and_phenology.py      # indices, phenology, validation
-pytest -q                                            # 48 tests, no credentials needed
+pytest -q                                          # 48 tests, ~1 second
+python analysis/step3_audit_sampling_points.py     # is each point actually farmland?
+python analysis/step5_drought_and_phenology.py     # drought indices, phenology, the
+                                                    # calendar-vs-phenology-aligned result
 ```
 
-The audit that started all of this runs on its own:
+`step5` is the main event — it reproduces every number in [Results](#results--the-phase-aligned-detector-does-not-win)
+above and writes them to `data/processed/`.
+
+The original audit that started this project runs the same way, against the legacy hand-picked
+dataset it caught:
 
 ```bash
 python analysis/step1_check_the_data.py          # coverage, gaps, value ranges
 python analysis/step2_look_at_one_site.py        # NDVI per year as ASCII curves
-python analysis/step3_audit_sampling_points.py   # is each point actually farmland?
-python analysis/step4_confirm_with_landcover.py  # confirm it independently (needs GEE)
+python analysis/step3_audit_sampling_points.py --csv <path-to-sentinel2_timeseries.csv>
 ```
 
-Run them in that order. Step 3 infers the verdict from the NDVI signal; step 4 checks the same
-question against a land-cover product that never saw the time series. Step 2 is the one that
-cannot be skipped — the aggregate statistics in step 1 looked completely fine.
+Step 2 is the one worth not skipping — the aggregate statistics in step 1 looked completely
+fine; only plotting individual sites made the problem visible.
+
+### Option B — pull fresh satellite data yourself (~15–30 minutes, needs Earth Engine)
+
+```bash
+# after the venv + pip install above:
+cp .env.example .env    # fill in GEE_SERVICE_ACCOUNT / GEE_PRIVATE_KEY,
+                         # or run `earthengine authenticate` once and leave .env empty
+
+python -m cropsignal.extract              # 24 sites x 138 periods, ~15-30 min at 6 workers
+python analysis/step5_drought_and_phenology.py
+```
+
+`extract.py` resumes automatically if interrupted — it skips periods already written to
+`data/raw/timeseries.csv`, so re-running the same command picks up where it left off.
 
 ---
 
@@ -234,6 +263,14 @@ cannot return quietly.
 | `bestEffort=True` on a 15 km disc | 9 of 12 Kenyan sites "had no cropland" | EE silently coarsened the scale until the request fit |
 | σ floor of 0 in the z-score | Stable sites permanently "anomalous" | Dividing by ~1e-16 on near-identical years |
 | Validation verdict from NaN | Printed "calendar baseline is better" on zero data | Two NaNs compared, falling through to the last branch |
+| Audit's own NDVI threshold | Flagged 4 of *this project's own verified* sites as fake | Real arid-irrigated fields genuinely peak below the threshold tuned to catch towns |
+
+The last one is worth dwelling on: the tool built to catch bad sampling points had the same
+kind of blind spot — a single global threshold standing in for a judgment call that needed more
+context. It's fixed now by cross-checking against the independent WorldCereal/WorldCover purity
+score wherever one exists, matched by coordinate (not name — two datasets here reuse names like
+"Zaranj" for different points, so a name-only match would have let a verified site's purity leak
+onto an unrelated, unverified one).
 
 The pattern: **the dangerous failures are the ones that return a value.** An exception gets
 fixed in ten minutes. A plausible number gets published.
@@ -277,6 +314,24 @@ fixed in ten minutes. A plausible number gets published.
 - Jönsson, P. & Eklundh, L. (2004). TIMESAT — a program for analyzing time-series of satellite
   sensor data. *Computers & Geosciences*, 30(8).
 
+## Known open problem
+
+`PhenoShift` assumes one growing season per year and loses to the calendar baseline wherever
+that's false — which is most places (see [Results](#results--the-phase-aligned-detector-does-not-win)).
+Fixing it means detecting the number of cropping cycles per site-year and warping each
+separately. That's real algorithm work and it isn't done here. If you take it on, `phenology.py`
+has the diagnosis and `tests/test_phenology.py` has the synthetic-curve test scaffolding to
+build against.
+
+## Contributing
+
+Issues and PRs are welcome — bug reports on the sampling/extraction pipeline, additional
+countries or sites, or a crack at the bimodal-season problem above. `pytest -q` needs no
+credentials and should pass before a PR; CI runs it on Python 3.10–3.12. If you're adding a
+new failure mode you found (rather than a feature), a regression test in
+`tests/test_regressions.py` following the existing pattern — docstring explaining what shipped
+and why it was invisible, then the test — is the most useful shape of PR this repo can get.
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Use it, fork it, adapt it for your own sites.

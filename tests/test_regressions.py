@@ -274,3 +274,63 @@ class TestSearchScaling:
         from cropsignal.masks import SEARCH_RINGS
         assert list(SEARCH_RINGS) == sorted(SEARCH_RINGS), "rings must expand"
         assert SEARCH_RINGS[0] <= 1000, "first ring should be cheap and local"
+
+
+class TestAuditPurityOverride:
+    """
+    Bug: step3's audit classified every site on NDVI peak/amplitude alone,
+    thresholds tuned to catch towns and rivers in the original hand-picked
+    dataset. Re-run against this project's own sites - each independently
+    confirmed 100% cropland by WorldCereal + WorldCover - it flagged four of
+    them as "no usable crop signal", because genuinely arid, low-vigor
+    irrigated fields (Zaranj, Arghandab, Shakardara in Afghanistan;
+    UasinGishu in Kenya) simply have a lower NDVI peak than lush temperate
+    cropland. The audit was contradicting evidence it already had.
+    """
+
+    def test_verified_purity_overrides_low_ndvi_peak(self):
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "analysis"))
+        from step3_audit_sampling_points import classify
+
+        # Real case: Zaranj, arid-irrigated, peak 0.19, but 100% verified cropland.
+        assert classify(peak=0.19, amp=0.05, purity=1.0) == "OK   - verified cropland, low-vigor signal"
+        # Without a purity score the same numbers must still fail, exactly
+        # as they did before - this is what caught the original bug.
+        assert classify(peak=0.19, amp=0.05, purity=None).startswith("FAIL")
+
+    def test_low_purity_does_not_override(self):
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "analysis"))
+        from step3_audit_sampling_points import classify
+
+        # A purity score below the trust threshold must not rescue a bad site.
+        assert classify(peak=0.19, amp=0.05, purity=0.5).startswith("FAIL")
+
+    def test_purity_match_requires_coordinate_not_just_name(self):
+        """
+        The bug this guards against: two datasets in this project reuse the
+        same site names ("Zaranj", "Shakardara", ...) for different
+        coordinates. Matching purity by name alone would let a verified
+        site's purity leak onto an unrelated point of the same name and
+        defeat the audit on exactly the data it exists to catch.
+        """
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "analysis"))
+        from step3_audit_sampling_points import _purity_for
+
+        table = [("Zaranj", 31.00023, 61.87030, 1.0)]  # verified coordinate
+
+        # Same name, coordinate far away (a different, unverified "Zaranj").
+        far = _purity_for("Zaranj", lat=31.50, lon=61.87030, purity_table=table)
+        assert far is None, "purity leaked onto an unverified coordinate via name match alone"
+
+        # Same name, coordinate close (within tolerance) - should match.
+        near = _purity_for("Zaranj", lat=31.00030, lon=61.87025, purity_table=table)
+        assert near == 1.0
