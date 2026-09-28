@@ -1,0 +1,37 @@
+site,country,declared_zone,dominant_cover,dominant_%,agri_%,builtup_%,water_%
+GhazniCity,Afghanistan,highland_rainfed,Built-up,87,0,87,0
+Maimana,Afghanistan,plains_rainfed,Built-up,93,7,93,0
+Chaghcharan,Afghanistan,highland_rainfed,Built-up,52,17,52,24
+Faizabad,Afghanistan,highland_rainfed,Built-up,30,27,30,29
+Arghandab,Afghanistan,arid_irrigated,Bare/sparse,60,40,0,0
+Zaranj,Afghanistan,arid_irrigated,Cropland,87,87,0,0
+Injil,Afghanistan,plains_irrigated,Cropland,88,88,9,0
+Shakardara,Afghanistan,highland_irrigated,Cropland,89,89,0,0
+Kama,Afghanistan,lowland_irrigated,Tree cover,74,100,0,0
+Dawlatabad,Afghanistan,plains_irrigated,Cropland,100,100,0,0
+Khanabad,Afghanistan,plains_irrigated,Cropland,100,100,0,0
+NadAli,Afghanistan,arid_irrigated,Cropland,100,100,0,0
+Tiel,Netherlands,temperate_horticulture,Water,100,0,0,100
+Venlo,Netherlands,temperate_horticulture,Built-up,100,0,100,0
+Alblasserdam,Netherlands,temperate_dairy_pasture,Built-up,97,3,97,0
+Dronten,Netherlands,temperate_arable,Built-up,77,23,77,0
+Goes,Netherlands,temperate_arable,Built-up,77,23,77,0
+Uden,Netherlands,temperate_dairy_pasture,Grassland,59,60,40,0
+Sneek,Netherlands,temperate_dairy_pasture,Tree cover,35,66,34,0
+Veendam,Netherlands,temperate_arable,Tree cover,68,68,32,0
+Almelo,Netherlands,temperate_dairy_pasture,Grassland,93,100,0,0
+Wieringermeer,Netherlands,temperate_arable,Cropland,99,100,0,0
+Emmen,Netherlands,temperate_arable,Grassland,100,100,0,0
+Bunnik,Netherlands,temperate_dairy_pasture,Grassland,71,100,0,0
+Hastings,New Zealand,maritime_horticulture,Built-up,100,0,100,0
+Blenheim,New Zealand,maritime_horticulture,Built-up,91,7,91,0
+Balclutha,New Zealand,maritime_arable,Built-up,88,12,88,0
+Gore,New Zealand,maritime_dairy_pasture,Water,80,20,0,80
+PalmerstonN,New Zealand,maritime_dairy_pasture,Built-up,69,31,69,0
+Masterton,New Zealand,maritime_arable,Built-up,44,56,44,0
+Hamilton,New Zealand,maritime_dairy_pasture,Tree cover,57,57,13,29
+TePuke,New Zealand,maritime_horticulture,Tree cover,47,60,40,0
+Stratford,New Zealand,maritime_dairy_pasture,Grassland,73,75,25,0
+Ashburton,New Zealand,maritime_arable,Tree cover,87,87,13,0
+Kerikeri,New Zealand,maritime_horticulture,Tree cover,100,100,0,0
+Motueka,New Zealand,maritime_horticulture,Cropland,71,100,0,0
