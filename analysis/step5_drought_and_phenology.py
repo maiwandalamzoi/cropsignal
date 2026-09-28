@@ -211,6 +211,11 @@ def report_validation(df):
     usable = base["water_stress_index"].notna().sum()
     print(f"Independent water/thermal stress index available for "
           f"{usable:,} of {len(base):,} observations ({usable/len(base):.0%}).")
+    if usable == 0:
+        years = base["year"].nunique()
+        print(f"  -> none available. The index standardises each site against its")
+        print(f"     own history at that point in the season, which needs at least")
+        print(f"     4 years; this extract covers {years}.")
     print("Built from MODIS evapotranspiration and land surface temperature")
     print("only - no Sentinel-2 reflectance, so it cannot restate the labels.\n")
 
@@ -250,12 +255,25 @@ def report_validation(df):
         sub = res[res["country"] == country].set_index("detector")
         if len(sub) < 2:
             continue
-        delta = sub.loc["phenology-aligned", "water_auc"] - sub.loc["calendar", "water_auc"]
+        cal = sub.loc["calendar", "water_auc"]
+        phen = sub.loc["phenology-aligned", "water_auc"]
+
+        # A missing AUC means the comparison could not be made - too little
+        # record, or no independent index at these sites. Saying "the
+        # calendar baseline is better" there would be a confident claim
+        # drawn from nothing, which is exactly the failure this whole
+        # project is about.
+        if not (np.isfinite(cal) and np.isfinite(phen)):
+            print(f"  {country:12s} not comparable - no independent stress "
+                  f"index available for these observations")
+            continue
+
+        delta = phen - cal
         verdict = ("phenology alignment helps" if delta > 0.01 else
                    "no material difference" if delta > -0.01 else
                    "calendar baseline is better here")
-        print(f"  {country:12s} water_auc {sub.loc['calendar','water_auc']:.3f} -> "
-              f"{sub.loc['phenology-aligned','water_auc']:.3f}  ({delta:+.3f})  {verdict}")
+        print(f"  {country:12s} water_auc {cal:.3f} -> {phen:.3f}  "
+              f"({delta:+.3f})  {verdict}")
 
     print()
     print("Read these as effect sizes, not proof. An AUC near 0.5 on both")
