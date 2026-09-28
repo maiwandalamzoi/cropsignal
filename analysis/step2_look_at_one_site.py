@@ -3,6 +3,7 @@ STEP 2 - Look at single sites with your own eyes before trusting any metric.
 
 Run:  python analysis/step2_look_at_one_site.py
       python analysis/step2_look_at_one_site.py Lelystad
+      python analysis/step2_look_at_one_site.py --csv data/legacy/sentinel2_timeseries.csv
 
 Aggregate statistics hide the thing this whole project is about. Print one
 site's NDVI as a text sparkline, one row per year, and the question answers
@@ -25,12 +26,23 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from phenoshift import detect_season_start  # noqa: E402
+from cropsignal import detect_season_start  # noqa: E402
 
-LEGACY_CSV = (Path(__file__).resolve().parents[2]
-              / "crop-stress-prediction" / "data" / "raw" / "sentinel2_timeseries.csv")
-_OWN = Path(__file__).resolve().parents[1] / "data" / "raw" / "timeseries.csv"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+LEGACY_CSV = _REPO_ROOT / "data" / "legacy" / "sentinel2_timeseries.csv"
+_OWN = _REPO_ROOT / "data" / "raw" / "timeseries.csv"
 DEFAULT_CSV = _OWN if _OWN.exists() else LEGACY_CSV
+
+
+def _parse_args(argv):
+    """--csv PATH, else default resolution; anything else is a site name."""
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", help="time series CSV to read (default: this repo's "
+                                  "own extract, or the bundled legacy dataset)")
+    ap.add_argument("sites", nargs="*", help="site name(s) to show")
+    args = ap.parse_args(argv)
+    return Path(args.csv) if args.csv else DEFAULT_CSV, (args.sites or None)
 
 BLOCKS = " .:-=+*#%@"
 
@@ -79,8 +91,8 @@ def show_site(df, site):
         print(f"  {'-> seasons roughly calendar-locked' if max(vals) - min(vals) < 60 else '-> seasons move a lot; calendar comparison is unfair here'}")
 
 
-def main(sites=None):
-    df = pd.read_csv(DEFAULT_CSV, parse_dates=["period_start"])
+def main(sites=None, csv_path: Path = DEFAULT_CSV):
+    df = pd.read_csv(csv_path, parse_dates=["period_start"])
     df["year"] = df["period_start"].dt.year
     df["doy"] = df["period_start"].dt.dayofyear
 
@@ -88,6 +100,7 @@ def main(sites=None):
         # one representative site per country
         sites = [df[df["country"] == c]["name"].iloc[0] for c in sorted(df["country"].unique())]
 
+    print(f"Reading {csv_path}")
     print("Darker/denser characters = higher NDVI. Each row is one year.")
     print("If the dense band sits in the same columns every year, the season is")
     print("calendar-locked. If it slides, it is not.")
@@ -100,4 +113,5 @@ def main(sites=None):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or None)
+    _csv, _sites = _parse_args(sys.argv[1:])
+    main(_sites, _csv)

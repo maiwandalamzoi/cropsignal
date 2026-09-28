@@ -14,20 +14,29 @@ it inside each point's buffer and read off what is actually on the ground.
 If step 3's failing points come back as Built-up / Bare / Water here, the
 diagnosis holds on independent evidence.
 
-Requires Earth Engine credentials (see crop-stress-prediction/.env).
+Requires Earth Engine credentials (see .env.example).
+
+Reads the 36 legacy coordinates straight from the bundled CSV
+(data/legacy/sentinel2_timeseries.csv) rather than importing the original
+project's locations.py module. An earlier version imported that module
+directly from a sibling repo on disk, which meant this script only ran for
+someone who happened to have both repos checked out side by side - not a
+standalone clone of this one.
 """
 import sys
 from pathlib import Path
 
 import pandas as pd
 
-REPO = Path(__file__).resolve().parents[2] / "crop-stress-prediction"
-sys.path.insert(0, str(REPO / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import ee  # noqa: E402
 
-from gee_auth import init_ee  # noqa: E402
-from locations import FIELD_BUFFER_M, LOCATIONS  # noqa: E402
+from cropsignal.gee import init  # noqa: E402
+
+LEGACY_CSV = REPO_ROOT / "data" / "legacy" / "sentinel2_timeseries.csv"
+FIELD_BUFFER_M = 60  # matches the buffer the legacy extraction used
 
 # ESA WorldCover v200 class codes
 CLASSES = {
@@ -39,13 +48,21 @@ CLASSES = {
 AGRI = {30, 40, 10}  # grassland (pasture), cropland, tree cover (orchards)
 
 
-def main(buffer_m: int = FIELD_BUFFER_M) -> pd.DataFrame:
-    init_ee()
+def load_locations(csv_path: Path = LEGACY_CSV) -> list:
+    """(name, country, region, lat, lon, climate_zone) for each unique site."""
+    cols = ["name", "country", "region", "lat", "lon", "climate_zone"]
+    df = pd.read_csv(csv_path, usecols=cols).drop_duplicates("name")
+    return list(df[cols].itertuples(index=False, name=None))
+
+
+def main(buffer_m: int = FIELD_BUFFER_M, csv_path: Path = LEGACY_CSV) -> pd.DataFrame:
+    init()
+    locations = load_locations(csv_path)
     wc = ee.ImageCollection("ESA/WorldCover/v200").first().select("Map")
 
     feats = [
         ee.Feature(ee.Geometry.Point([lon, lat]).buffer(buffer_m), {"name": name})
-        for name, _c, _r, lat, lon, _z in LOCATIONS
+        for name, _c, _r, lat, lon, _z in locations
     ]
     fc = ee.FeatureCollection(feats)
 
@@ -53,7 +70,7 @@ def main(buffer_m: int = FIELD_BUFFER_M) -> pd.DataFrame:
         collection=fc, reducer=ee.Reducer.frequencyHistogram(), scale=10
     ).getInfo()["features"]
 
-    meta = {n: (c, z) for n, c, _r, _la, _lo, z in LOCATIONS}
+    meta = {n: (c, z) for n, c, _r, _la, _lo, z in locations}
     rows = []
     for f in reduced:
         name = f["properties"]["name"]
@@ -97,7 +114,7 @@ def main(buffer_m: int = FIELD_BUFFER_M) -> pd.DataFrame:
     print("identified independently: once from the NDVI signal, once from a")
     print("land-cover product that never saw our time series.")
 
-    out = Path(__file__).resolve().parents[1] / "analysis" / "landcover_audit.csv"
+    out = REPO_ROOT / "analysis" / "landcover_audit.csv"
     df.to_csv(out, index=False)
     print(f"\nWrote {out}")
     return df

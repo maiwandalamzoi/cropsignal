@@ -64,11 +64,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-LEGACY_CSV = (Path(__file__).resolve().parents[2]
-              / "crop-stress-prediction" / "data" / "raw" / "sentinel2_timeseries.csv")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_BUNDLED_LEGACY_CSV = _REPO_ROOT / "data" / "legacy" / "sentinel2_timeseries.csv"
+_SIBLING_LEGACY_CSV = (_REPO_ROOT.parent / "crop-stress-prediction"
+                       / "data" / "raw" / "sentinel2_timeseries.csv")
+#: A bundled copy ships inside this repo (data/legacy/) so the original audit
+#: is reproducible from a standalone clone - a fresh `git clone` of cropsignal
+#: alone has no sibling crop-stress-prediction checkout to read. That sibling
+#: path is tried second, only for local development against a live copy.
+LEGACY_CSV = _BUNDLED_LEGACY_CSV if _BUNDLED_LEGACY_CSV.exists() else _SIBLING_LEGACY_CSV
 DEFAULT_CSV = LEGACY_CSV
-OWN_CSV = Path(__file__).resolve().parents[1] / "data" / "raw" / "timeseries.csv"
-OWN_SITES_JSON = Path(__file__).resolve().parents[1] / "data" / "sites_resolved.json"
+OWN_CSV = _REPO_ROOT / "data" / "raw" / "timeseries.csv"
+OWN_SITES_JSON = _REPO_ROOT / "data" / "sites_resolved.json"
 
 #: Within this many degrees (~200 m at these latitudes) a CSV row's
 #: coordinate is considered the same point as a resolved site's coordinate.

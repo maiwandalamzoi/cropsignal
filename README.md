@@ -29,13 +29,22 @@ algorithm.
 
 Then I audited the input data.
 
-**Fifteen of the thirty-six sampling points were not on farmland.** One sat on a river. Several
-sat inside towns. The coordinates had been chosen as *"representative farmland near each named
-locality"* — but the localities were town names, at two decimal places, roughly ±550 m. The
-pipeline sampled town centres and called them fields.
+**Twelve of the thirty-six sampling points were not on farmland**[^1]. One sat on a river.
+Several sat inside towns. The coordinates had been chosen as *"representative farmland near
+each named locality"* — but the localities were town names, at two decimal places, roughly
+±550 m. The pipeline sampled town centres and called them fields.
 
 Nothing errored. The time series were complete, the gaps were clean, six full years per site.
 The models trained. The dashboards rendered. The whole thing described rooftops.
+
+![12 of the original 36 hand-picked points were not farmland](figures/fig3_sampling_audit.png)
+
+[^1]: The first pass, on NDVI signal alone, found fifteen. Two of those — Zaranj and
+    Shakardara, both in Afghanistan — turned out to sit within ~200 m of independently
+    verified cropland once the audit itself was cross-checked against ESA WorldCereal/WorldCover
+    (see [the audit's own false positive](#bugs-this-pipeline-shipped-and-what-they-teach)
+    further down). Real, low-vigor arid-irrigated fields, not fakes — the count went down
+    because the check got better, not because the finding got smaller.
 
 | Site | Declared as | ESA WorldCover says |
 |---|---|---|
@@ -158,6 +167,8 @@ fewer observations:
 | Calendar | Kenya | 984 | 21.4% | **0.708** | 0.510 |
 | Phase-aligned | Kenya | 761 | 23.8% | 0.630 | 0.544 |
 
+![The phase-aligned detector helps in Afghanistan, loses in Kenya](figures/fig1_algorithm_result.png)
+
 Phase alignment gains a marginal +0.026 AUC in Afghanistan and **loses 0.078 in Kenya**. On the
 contamination test it is *worse in both countries* — 0.533 and 0.544 against the baseline's
 0.489 and 0.510 — which is the precise opposite of what it was built to do.
@@ -169,6 +180,8 @@ Season per year. That assumption is violated at every site in the sample:
 |---|---|---|
 | Kenya | **2** (all 12 sites) | ~May (long rains), ~Nov–Dec (short rains) |
 | Afghanistan | **2** | ~April, ~August |
+
+![Bimodal cropping breaks the single-season assumption](figures/fig2_bimodal_seasons.png)
 
 With two cropping cycles a year, the extractor anchors on whichever cycle is larger that year —
 so the anchors jump between cycles, and the warp ends up aligning one year's long rains against
@@ -207,28 +220,36 @@ git clone https://github.com/maiwandalamzoi/cropsignal
 cd cropsignal
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -e ".[analysis,dev]"
+pip install -e ".[analysis,dev]"   # a few minutes - earthengine-api pulls in a
+                                    # large dependency tree even though nothing
+                                    # here calls Earth Engine (see Option B)
 
-pytest -q                                          # 48 tests, ~1 second
+pytest -q                                          # 51 tests, ~1 second
 python analysis/step3_audit_sampling_points.py     # is each point actually farmland?
 python analysis/step5_drought_and_phenology.py     # drought indices, phenology, the
                                                     # calendar-vs-phenology-aligned result
+python analysis/step6_charts.py                    # the three PNGs embedded in this README
 ```
 
 `step5` is the main event — it reproduces every number in [Results](#results--the-phase-aligned-detector-does-not-win)
-above and writes them to `data/processed/`.
+above and writes them to `data/processed/`. `step6` turns them into the charts above, in
+`figures/` — nothing new is computed, it only reads what `step5` and `step3` already wrote.
 
-The original audit that started this project runs the same way, against the legacy hand-picked
-dataset it caught:
+The original audit that started this project runs the same way, against the 36-site legacy
+dataset bundled in `data/legacy/` — no separate download needed:
 
 ```bash
-python analysis/step1_check_the_data.py          # coverage, gaps, value ranges
-python analysis/step2_look_at_one_site.py        # NDVI per year as ASCII curves
-python analysis/step3_audit_sampling_points.py --csv <path-to-sentinel2_timeseries.csv>
+python analysis/step1_check_the_data.py --csv data/legacy/sentinel2_timeseries.csv
+python analysis/step2_look_at_one_site.py                    # NDVI per year as ASCII curves
+python analysis/step3_audit_sampling_points.py --csv data/legacy/sentinel2_timeseries.csv
+python analysis/step4_confirm_with_landcover.py               # needs Earth Engine (see Option B)
 ```
 
 Step 2 is the one worth not skipping — the aggregate statistics in step 1 looked completely
-fine; only plotting individual sites made the problem visible.
+fine; only plotting individual sites made the problem visible. Step 4 is the odd one out in
+this list: it needs Earth Engine credentials, because its whole point is confirming step 3's
+verdict against a *second, independent* source — a land-cover product that never saw the NDVI
+time series step 1–3 are built from.
 
 ### Option B — pull fresh satellite data yourself (~15–30 minutes, needs Earth Engine)
 
