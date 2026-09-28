@@ -41,6 +41,26 @@ year sets the extreme and every later year is scored against it. The record
 length actually used is reported alongside every index, and
 `MIN_BASELINE_YEARS` refuses to compute at all below a floor, rather than
 returning a confident-looking number from three years of data.
+
+READ THE THRESHOLDS WITH THE BASELINE IN MIND
+---------------------------------------------
+The NOAA/STAR cut-offs (40 stress, 26 severe) were established against
+AVHRR records spanning thirty years and more. Over such a record, VHI
+below 40 genuinely is unusual.
+
+Over a six-year record it is not. Min-max scaling guarantees that each
+site's worst observation scores 0 and its best 100, so every site displays
+its own worst season as an extreme drought *by construction*, whether or
+not that season was remarkable in a longer context. On this project's
+Sentinel-2 data that produces around half of all observations below the
+"stress" threshold - a figure which says more about the six-year window
+than about the crops.
+
+So on a short baseline these indices rank seasons *within the sample*.
+They do not classify drought in absolute terms, and the NOAA thresholds
+should not be quoted as if they did. A published bulletin needs the long
+climatology - typically the MODIS or AVHRR record - even when the
+operational product is produced at Sentinel-2 resolution.
 """
 from __future__ import annotations
 

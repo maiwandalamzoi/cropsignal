@@ -10,6 +10,26 @@ Method follows the standard amplitude-threshold approach used in land
 surface phenology work (White et al. 1997; Jonsson & Eklundh 2004,
 TIMESAT): smooth the annual curve, then take Start/Peak/End of Season
 from fixed fractions of the season's own amplitude.
+
+KNOWN LIMITATION - ONE SEASON PER YEAR
+--------------------------------------
+`phenometrics` extracts a single Start/Peak/End triple per phenological
+year. That is wrong wherever a year holds more than one cropping cycle,
+and measurement on this project's own data shows that is the common case,
+not the exception: all twelve Kenyan sites are bimodal, peaking around May
+(long rains) and November-December (short rains), and the Afghan sites show
+a second August peak alongside the April one.
+
+On such a site the extractor picks whichever cycle happens to be larger
+that year, so the anchors can jump between cycles between years, and the
+warp then aligns the long rains of one year against the short rains of
+another. The measured consequence is in the repository README: phase
+alignment scores *worse* than the calendar baseline in Kenya.
+
+Handling this properly means detecting the number of cycles per year and
+warping each separately. Until that exists, treat the phase-aligned
+detector as applicable to single-cycle systems only, and prefer the
+calendar baseline elsewhere.
 """
 from __future__ import annotations
 

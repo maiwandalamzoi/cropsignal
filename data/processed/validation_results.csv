@@ -1,0 +1,5 @@
+detector,country,n,flag_rate,water_auc,phenology_auc
+calendar,Afghanistan,1310,19.3,0.547,0.489
+calendar,Kenya,984,21.4,0.708,0.51
+phenology-aligned,Afghanistan,1065,23.0,0.573,0.533
+phenology-aligned,Kenya,761,23.8,0.63,0.544

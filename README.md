@@ -1,8 +1,11 @@
 # CropSignal
 
 Multi-sensor Earth observation for agricultural monitoring: **verified cropland sampling**,
-a **multi-index satellite time series**, **published drought indices at field scale**, and
-**phenology-aligned anomaly detection** — built for smallholder systems in Afghanistan and Kenya.
+a **multi-index satellite time series**, **published drought indices at field scale**, and a
+**phenology-aligned anomaly detector that does not beat its baseline** — built for smallholder
+systems in Afghanistan and Kenya.
+
+24 sites · 2019–2024 · 16 variables · 5 sensors · 3,287 observations · 48 tests
 
 Author: **Maiwand Jan Alamzoi** — [m.alamzoi123@gmail.com](mailto:m.alamzoi123@gmail.com) ·
 [github.com/maiwandalamzoi](https://github.com/maiwandalamzoi)
@@ -94,6 +97,15 @@ out = add_drought_indices(df)   # VCI, TCI, VHI, ESI_index, drought_class
 Below a five-year record the indices return `NaN` rather than a confident-looking number
 computed from too little history.
 
+> **Read the thresholds with the baseline in mind.** NOAA/STAR's 40 / 26 cut-offs were set
+> against AVHRR records of thirty years and more. Over six years, min-max scaling guarantees
+> each site's worst observation scores 0 — so every site shows its worst season as an extreme
+> drought *by construction*. On this data that puts roughly half of all observations below the
+> "stress" line, which says more about the six-year window than about the crops. On a short
+> baseline these indices **rank seasons within the sample; they do not classify drought in
+> absolute terms.** An operational bulletin needs the long MODIS/AVHRR climatology even when
+> the product is delivered at Sentinel-2 resolution.
+
 ### 4. Phenology-aligned anomaly detection
 
 Most operational vegetation-anomaly methods compare an observation to the same *calendar date*
@@ -127,7 +139,41 @@ fewer observations:
 - **water-stress AUC** — higher is better; the flag tracks independently measured stress
 - **phenology AUC** — closer to 0.5 is better; the flag is indifferent to how far the season shifted
 
-Results: `python analysis/step5_drought_and_phenology.py` (see [Reproduce it](#reproduce-it)).
+### Results — the phase-aligned detector does not win
+
+24 sites, 2019–2024, 3,287 observations, independent index available for 77% of them.
+
+| Detector | Country | n | Flagged | **Water-stress AUC** | **Phenology AUC** |
+|---|---|---:|---:|---:|---:|
+| Calendar | Afghanistan | 1,310 | 19.3% | 0.547 | 0.489 |
+| Phase-aligned | Afghanistan | 1,065 | 23.0% | **0.573** | 0.533 |
+| Calendar | Kenya | 984 | 21.4% | **0.708** | 0.510 |
+| Phase-aligned | Kenya | 761 | 23.8% | 0.630 | 0.544 |
+
+Phase alignment gains a marginal +0.026 AUC in Afghanistan and **loses 0.078 in Kenya**. On the
+contamination test it is *worse in both countries* — 0.533 and 0.544 against the baseline's
+0.489 and 0.510 — which is the precise opposite of what it was built to do.
+
+**Why it fails, measured rather than guessed.** The method extracts one Start/Peak/End of
+Season per year. That assumption is violated at every site in the sample:
+
+| Country | Seasonal peaks per year | Months |
+|---|---|---|
+| Kenya | **2** (all 12 sites) | ~May (long rains), ~Nov–Dec (short rains) |
+| Afghanistan | **2** | ~April, ~August |
+
+With two cropping cycles a year, the extractor anchors on whichever cycle is larger that year —
+so the anchors jump between cycles, and the warp ends up aligning one year's long rains against
+another year's short rains. Bimodal cropping is the norm across East Africa, which is exactly
+where this kind of tool is most needed.
+
+**So: use the calendar baseline.** The phase-aligned detector ships because it is a clean
+negative result with a diagnosed cause, not because it works. Fixing it means detecting the
+number of cycles per year and warping each separately. That is not done here.
+
+The parts that *do* hold up are the verified sampling, the multi-sensor extraction, and the
+drought indices — plus the finding that the independent water/thermal signal is detectable at
+all (Kenya calendar AUC 0.708 is a real effect, not noise).
 
 ### What this is not
 
@@ -187,6 +233,7 @@ cannot return quietly.
 | No region filter on collections | Composited the entire global archive | A bad scene anywhere killed every site |
 | `bestEffort=True` on a 15 km disc | 9 of 12 Kenyan sites "had no cropland" | EE silently coarsened the scale until the request fit |
 | σ floor of 0 in the z-score | Stable sites permanently "anomalous" | Dividing by ~1e-16 on near-identical years |
+| Validation verdict from NaN | Printed "calendar baseline is better" on zero data | Two NaNs compared, falling through to the last branch |
 
 The pattern: **the dangerous failures are the ones that return a value.** An exception gets
 fixed in ten minutes. A plausible number gets published.

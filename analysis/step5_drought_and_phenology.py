@@ -219,13 +219,22 @@ def report_validation(df):
     print("Built from MODIS evapotranspiration and land surface temperature")
     print("only - no Sentinel-2 reflectance, so it cannot restate the labels.\n")
 
+    # How far each season's peak sits from its site's median peak is a
+    # property of the site-year, not of a detector. Measure it once, from
+    # the phenology fit, and apply the same values to both detectors -
+    # otherwise only the phenology-aligned detector has a shift column and
+    # the contamination test, which is the whole point of the comparison,
+    # cannot be run on the baseline at all.
+    shift_ref = PhenoShift(site_col="site", time_col="period_start",
+                           value_col="NDVI").fit_transform(base)
+    season_shift = shift_ref["pos_shift_days"].values
+
     results = []
     for label, Detector in [("calendar", CalendarAnomaly), ("phenology-aligned", PhenoShift)]:
         det = Detector(site_col="site", time_col="period_start", value_col="NDVI")
         scored = det.fit_transform(base)
         scored["water_stress_index"] = base["water_stress_index"].values
-        if "pos_shift_days" not in scored or scored["pos_shift_days"].isna().all():
-            scored["pos_shift_days"] = np.nan
+        scored["pos_shift_days"] = season_shift
 
         for country in sorted(scored["country"].dropna().unique()):
             sub = scored[scored["country"] == country]
