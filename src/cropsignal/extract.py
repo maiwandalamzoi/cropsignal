@@ -35,6 +35,7 @@ import csv
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -54,6 +55,13 @@ PERIOD_DAYS = 16
 SAMPLE_SCALE_M = 20
 
 INCLUDE = ("optical", "radar", "biophysical", "water", "thermal")
+
+#: Compositing periods requested concurrently. Each period is one blocking
+#: round trip to Earth Engine that spends almost all its time waiting, so
+#: overlapping them cuts wall-clock time close to linearly. Kept modest:
+#: Earth Engine rate-limits per user, and backing off from a burst of 429s
+#: is slower than never provoking them.
+DEFAULT_WORKERS = 6
 
 #: Native resolution of each variable, recorded in the output so that a
 #: 1 km value is never silently treated as a 10 m one.
@@ -118,7 +126,8 @@ def reduce_period(points_fc, start: date, end: date, bands: list,
 
 
 def main(start: str | None = None, end: str | None = None,
-         out: str | None = None, resume: bool = True):
+         out: str | None = None, resume: bool = True,
+         workers: int = DEFAULT_WORKERS):
     init()
     sites = load_sites()
     points_fc = to_feature_collection(sites, buffer_m=FIELD_BUFFER_M)
@@ -141,7 +150,8 @@ def main(start: str | None = None, end: str | None = None,
                "period_start", "period_end"]
               + bands + [f"{b}_n" for b in bands])
 
-    print(f"{len(sites)} sites x {len(periods)} periods, {len(bands)} variables")
+    print(f"{len(sites)} sites x {len(periods)} periods, {len(bands)} variables, "
+          f"{workers} concurrent requests")
     print(f"Variables: {', '.join(bands)}")
     if done:
         print(f"Resuming: {len(done)} periods already written, {len(todo)} to go")
@@ -155,8 +165,10 @@ def main(start: str | None = None, end: str | None = None,
         if mode == "w":
             writer.writeheader()
 
-        for i, (p_start, p_end) in enumerate(todo, 1):
+        def rows_for(period):
+            p_start, p_end = period
             feats = reduce_period(points_fc, p_start, p_end, bands, region=region)
+            out_rows = []
             for feat in feats:
                 p = feat["properties"]
                 row = {
@@ -174,15 +186,30 @@ def main(start: str | None = None, end: str | None = None,
                     if n:
                         has_any = True
                 if has_any:  # a period with nothing valid anywhere is not a row
-                    writer.writerow(row)
-                    written += 1
-            f.flush()
+                    out_rows.append(row)
+            return out_rows
 
-            if i % 5 == 0 or i == len(todo):
-                rate = i / max(time.time() - t0, 1e-9)
-                eta = (len(todo) - i) / rate / 60 if rate else 0
-                print(f"  [{i}/{len(todo)}] {p_start}  {written} rows  "
-                      f"eta {eta:.0f} min")
+        # Requests run concurrently; writing stays on this thread, so the CSV
+        # needs no lock and an interrupted run cannot leave a half-written row.
+        completed = 0
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(rows_for, period): period for period in todo}
+            for fut in as_completed(futures):
+                p_start = futures[fut][0]
+                try:
+                    for row in fut.result():
+                        writer.writerow(row)
+                        written += 1
+                except Exception as e:
+                    print(f"  ! {p_start}: {type(e).__name__}: {str(e)[:100]}",
+                          file=sys.stderr)
+                f.flush()
+                completed += 1
+                if completed % 5 == 0 or completed == len(todo):
+                    rate = completed / max(time.time() - t0, 1e-9)
+                    eta = (len(todo) - completed) / rate / 60 if rate else 0
+                    print(f"  [{completed}/{len(todo)}] {written} rows  "
+                          f"eta {eta:.0f} min")
 
     print(f"\nDone. {written} rows -> {out_path}")
     return out_path
@@ -194,4 +221,6 @@ if __name__ == "__main__":
     ap.add_argument("--end")
     ap.add_argument("--out")
     ap.add_argument("--no-resume", dest="resume", action="store_false")
+    ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
+                    help="concurrent Earth Engine requests")
     main(**vars(ap.parse_args()))
